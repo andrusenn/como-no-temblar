@@ -1,4 +1,5 @@
 // CNT
+// Solo instalar librerias OSC
 import oscP5.*;
 import netP5.*;
 import java.util.List;
@@ -7,11 +8,16 @@ OscP5 oscP5;
 NetAddress myRemoteLocation1;
 NetAddress myRemoteLocation2;
 String[] filasRegistro;
+// Solo las fechas de los hechos
 String[] fechasHechos;
-String[] fechasRango;// Contiene todos los dias
+// Funciona como puntero
+// Contiene todos los dias
+String[] fechasRango;
+// Dataset llamadas
 String[] registroLlamadas;
+// Lista para chequear fechas y enviar pulso
 List listaFechasHechos;
-//int altoFila = 0;
+// --------------------------------------
 int EDAD_MAX = 0;
 int FILA_Y = 0;
 // Contadores llamadas -------------------
@@ -19,7 +25,7 @@ int CONTADOR_LLAMADA = 0;
 // Contadores Hechos -------------------
 int CONTADOR_DIA = 0;
 int CONTADOR_HECHO = 0;
-int FRECUENCIA_HECHO = 120;
+int FRECUENCIA_HECHO = 80;
 // -------------------------------------
 // Indices (posicion columna) del archivo
 static int IDX_CASO = 0;
@@ -28,26 +34,24 @@ static int IDX_EDAD = 1;
 // 0 - Mujer
 // 1 - Hombre
 // 2 - Transgenero
-// 4 - no especificado
-static int IDX_GENERO_NOMBRE = 2;
-static int IDX_GENERO = 3;
+// 3 - no especificado
+//static int IDX_GENERO_NOMBRE = 2;
+//static int IDX_GENERO = 3;
 static int IDX_PROVINCIA = 6;
 
-// Dibujo -------------------------------
-// Lineas
+// Grafico ------------------------------
 int intervaloLineas = 10;
 int numLineas;
 PVector[] posPrevLineas;
 float[] posVelLineas;
 float[] DRAW_X;
-// Textos
+// Textos -----------------------------
 int DRAW_TEXTO_Y = 0;
 // -------------------------------------
 // Variables globales para grafico
-int[] G_EDAD = new int[24];
-float[] MOVIMIENTOS = new float[24];
-float[] DESPLAZAMIENTOS = new float[24];
-boolean G_HECHO = false;
+int[] G_EDAD = new int[24]; // x provincia
+float[] MOVIMIENTOS = new float[24]; // x provincia
+float[] DESPLAZAMIENTOS = new float[24]; // x provincia
 float G_HORA_LLAMADA = 0;
 int G_PROVINCIA = -1;
 // -------------------------------------
@@ -56,7 +60,11 @@ void settings() {
     size(800, 450);
 }
 void setup() {
-    frameRate(15);
+    // VELOCIDAD DEL DIBUJO -------------------------------
+    // Velocidad del void draw()
+    frameRate(15); // frames por segundo
+    // -----------------------------------------------------
+
     // NEt OSC ---------------------------------------------
     oscP5 = new OscP5(this, 12000);
     //myRemoteLocation1 = new NetAddress("192.168.0.30", 9997);
@@ -64,26 +72,37 @@ void setup() {
     myRemoteLocation1 = new NetAddress("127.0.0.1", 12001);
 
     // ----------------------------------------------------
+    // Carga ficheros -------------------------------------
+    //
     filasRegistro = loadStrings("registro_hechos.csv");
+    filasRegistro = subset(filasRegistro, 1); // Quitar nombres de las columnas
+    //
     fechasHechos = loadStrings("fechas_hechos.txt");
+    //
     registroLlamadas = loadStrings("registro_llamadas.csv");
+    registroLlamadas = subset(registroLlamadas, 1); // Quitar nombres de las columnas
+    // Se utiliza para activar pulso -> si listaFechasHechos existe en fechasRango
     listaFechasHechos = Arrays.asList(fechasHechos);
+    // Desde 01/01/2013 al 13/09/2019
     fechasRango = loadStrings("fechas_rango.txt");
-    // Busca el numero máximo
+    // Busca el numero máximo de edad ------------------------
     for (int i = 0; i< filasRegistro.length; i++) {
         String[] cols = filasRegistro[i].split(",");
         if (int(cols[1])<110 && int(cols[1]) > EDAD_MAX) {
             EDAD_MAX = int(cols[1]);
         }
     }
-    //altoFila = 1;//height / filas.length;
     // ----------------------------------------------------
-    // grafico hechos -------------------------------------
-    numLineas = 24;
-    intervaloLineas = height / numLineas;
+    // parametros grafico hechos --------------------------
+    numLineas = 24; // 24 provincias
+    intervaloLineas = height / numLineas; // alto de la fila segun -> alto total / cant provincias
+    // Almacena (x,y) previo para dibujar linea -> line(prev.x,prev.y,x,y)
     posPrevLineas = new PVector[numLineas];
+    // almacena velocidad x lina (provincia)
     posVelLineas = new float[numLineas];
+    // Controla el eje X por cada provincia
     DRAW_X = new float[numLineas];
+    // Inicialización
     for (int i = 0; i < numLineas; i++) {
         posPrevLineas[i] = new PVector(0, i * intervaloLineas);
         posVelLineas[i] = 1;
@@ -96,7 +115,8 @@ void setup() {
     noStroke();
 }
 void draw() {
-    if (frameCount % FRECUENCIA_HECHO == 0) {
+
+    if (frameCount % FRECUENCIA_HECHO == 0) { // maneja velocidad
         String fechaActual = fechasRango[CONTADOR_DIA%fechasRango.length];
 
         // Ingresa solo si hay un hecho ---------------
@@ -107,8 +127,14 @@ void draw() {
             String[] fila = filasRegistro[indexFilaRegistro].split(",");
             G_PROVINCIA = int(fila[IDX_PROVINCIA]);
             G_EDAD[G_PROVINCIA%numLineas] = int(fila[IDX_EDAD]);
-            // Envio pulso OSC
-            sendPulso(fila);
+            // **********************************************************
+            // Envio pulso OSC ******************************************
+            // Dataset --------------------------------------------------------------------------------------
+            // 0       1       2         3         4          5            6               7            8
+            // CASO    EDAD    GENERO    GENERO    VINCULO    PROVINCIA    ID PROVINCIA    MODALIDAD    FECHA
+            // ----------------------------------------------------------------------------------------------
+            sendPulso(fila); // -> ver ids arriba
+            // **********************************************************
             // Solo incrementa cuando hay un hecho
             CONTADOR_HECHO++;
         }
@@ -116,16 +142,22 @@ void draw() {
         CONTADOR_DIA++;
     }
     // LLAMADAS
-    if (frameCount % int(random(2, 40))== 0) {
-        ///
+    if (frameCount % int(random(2, 50))== 0) {
+        // ID contador llamada
         int IDX = CONTADOR_LLAMADA % registroLlamadas.length;
         fill(255, random(5, 60));
+        // intervalo proxima linea en Y
         int salto = int(random(10, 100));
+        // Random movimiento en x
         int desplazamiento_x = int(random(-50, 50));
         textAlign(CENTER, CENTER);
         textSize(random(5, 40));
         text(registroLlamadas[IDX], width/2 + desplazamiento_x, DRAW_TEXTO_Y);
-
+        // **********************************************************
+        // Envio pulso OSC ******************************************
+        // caso_id    llamante_descripcion    llamante_genero    llamante_vinculo_ninios_presentes    violencia_tipo    victima_edad    victima_rango_etario    victima_genero    victima_cantidad    agresor_cantidad    agresor_genero    agresor_relacion_victima    llamado_derivacion    llamado_fecha    llamado_hora    Hora
+        // sendPulso(registroLlamadas);
+        // **********************************************************
         String[] columnas = registroLlamadas[IDX].split(",");
         G_HORA_LLAMADA = int(columnas[columnas.length-1]);
         CONTADOR_LLAMADA++;
@@ -135,12 +167,13 @@ void draw() {
             DRAW_TEXTO_Y = 0;
         }
         // Alarga hecho x llamada -------------
-        posVelLineas[int(random(0, numLineas))] = 1 + (G_HORA_LLAMADA / 24);
+        float velocidad = 1.0 + (G_HORA_LLAMADA / 24 * 0.3);
+        posVelLineas[int(random(0, numLineas))] = velocidad;
     }
     if (frameCount % 2 == 0) {
         // Reduce el rango de amplitud
         for (int i = 0; i < numLineas; i++) {
-            G_EDAD[i] += 1;
+            G_EDAD[i] += map(sin(frameCount*10),-1,1,-1,3);
         }
     }
     // -------------------------------------------------------
@@ -153,25 +186,33 @@ void draw() {
         int DRAW_Y = int(i * intervaloLineas) + intervaloLineas;
 
         //
-        float n = noise(DRAW_Y*0.001, frameCount*0.001);
-        float mas = 0;//map(n,0,1,-100,100);
+        //float n = noise(DRAW_Y*0.001, frameCount*0.001);
+        //float mas = 0;//map(n,0,1,-100,100);
         stroke(255);
 
-        // Amplitud
+        // REFERIDO A EDAD -> Amplitud -> Y
         MOVIMIENTOS[i] = constrain(map(G_EDAD[i], 0, EDAD_MAX, 200 + random(-5, 5), 1), 0, EDAD_MAX);
 
         // Desplazamiento eje Y
-        DESPLAZAMIENTOS[i] = 0;
-        if (G_PROVINCIA == i) {
-            DESPLAZAMIENTOS[i] = map(sin(frameCount*4), -1, 1, -MOVIMIENTOS[i], MOVIMIENTOS[i]);
-        }
-        stroke(255);
+        DESPLAZAMIENTOS[i] = map(sin(frameCount*4), -1, 1, -MOVIMIENTOS[i], MOVIMIENTOS[i]);
+
+        // Colorea
+        //stroke(255);
+        //if (MOVIMIENTOS[i] > 80) {
+        color c = lerpColor(color(255, 255, 255), color(255, 0, 100), MOVIMIENTOS[i] / 205);
+        stroke(c);
+        //}
         if (i == 17) {
+            // Si es san juan -> rojo
             stroke(255, 0, 0);
         }
+        //if (MOVIMIENTOS[i] > 80) {
+        //    fill(255, 100);
+        //    textSize(10);
+        //    text(G_EDAD[i], posPrevLineas[i].x, posPrevLineas[i].y);
+        //}
         // Dibujo
-        line(posPrevLineas[i].x, posPrevLineas[i].y+mas, DRAW_X[i], DRAW_Y + DESPLAZAMIENTOS[i]+mas);
-
+        line(posPrevLineas[i].x, posPrevLineas[i].y, DRAW_X[i], DRAW_Y + DESPLAZAMIENTOS[i]);
         // Almacena el punto previo de la linea
         posPrevLineas[i].set(DRAW_X[i], DRAW_Y + DESPLAZAMIENTOS[i]);
 
