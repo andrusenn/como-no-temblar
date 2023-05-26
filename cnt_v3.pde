@@ -40,7 +40,7 @@ static int IDX_EDAD = 1;
 static int IDX_PROVINCIA = 6;
 
 // Grafico ------------------------------
-int intervaloLineas = 10;
+float intervaloLineas = 10;
 int numLineas;
 PVector[] posPrevLineas;
 float[] posVelLineas;
@@ -49,6 +49,7 @@ float[] DRAW_X;
 int DRAW_TEXTO_Y = 0;
 // -------------------------------------
 // Variables globales para grafico
+int[] G_COLOR = new int[24]; // x provincia
 int[] G_EDAD = new int[24]; // x provincia
 float[] MOVIMIENTOS = new float[24]; // x provincia
 float[] DESPLAZAMIENTOS = new float[24]; // x provincia
@@ -57,7 +58,7 @@ int G_PROVINCIA = -1;
 // -------------------------------------
 void settings() {
     //fullScreen();
-    size(800, 450);
+    size(1280, 720);
 }
 void setup() {
     // VELOCIDAD DEL DIBUJO -------------------------------
@@ -95,7 +96,7 @@ void setup() {
     // ----------------------------------------------------
     // parametros grafico hechos --------------------------
     numLineas = 24; // 24 provincias
-    intervaloLineas = height / numLineas; // alto de la fila segun -> alto total / cant provincias
+    intervaloLineas = height / numLineas * 0.8; // alto de la fila segun -> alto total / cant provincias
     // Almacena (x,y) previo para dibujar linea -> line(prev.x,prev.y,x,y)
     posPrevLineas = new PVector[numLineas];
     // almacena velocidad x lina (provincia)
@@ -108,6 +109,7 @@ void setup() {
         posVelLineas[i] = 1;
         DRAW_X[i] = 0;
         G_EDAD[i] = 999;
+        //G_COLOR[i] = color(255);
         MOVIMIENTOS[i] = 0;
         DESPLAZAMIENTOS[i] = 0;
     }
@@ -167,51 +169,54 @@ void draw() {
             DRAW_TEXTO_Y = 0;
         }
         // Alarga hecho x llamada -------------
-        float velocidad = 1.0 + (G_HORA_LLAMADA / 24 * 0.3);
+        float velocidad = 1.0 - (G_HORA_LLAMADA / 24 * 0.3);
         posVelLineas[int(random(0, numLineas))] = velocidad;
     }
     if (frameCount % 2 == 0) {
         // Reduce el rango de amplitud
         for (int i = 0; i < numLineas; i++) {
-            G_EDAD[i] += map(sin(frameCount*10),-1,1,-1,3);
+            G_EDAD[i] += map(sin(frameCount*10), -1, 1, -1, 3);
         }
     }
     // -------------------------------------------------------
     // GRAFICO -----------------------------------------------
     // -------------------------------------------------------
     for (int i = 0; i< numLineas; i++) {
-        strokeWeight(random(0.1, 2));
+        // Random filas llamados
+        // Utiliza la hora para dar grosor a la linea
+        String col_llam = registroLlamadas[floor(random(registroLlamadas.length))];
+        String[] columnas = col_llam.split(",");
+        float sw = float(columnas[columnas.length-1]) / 24 + 0.6;
+        strokeWeight(sw);
         // NUM LINEA = ID PROVINCIA
         // Eje Y
-        int DRAW_Y = int(i * intervaloLineas) + intervaloLineas;
-
-        //
-        //float n = noise(DRAW_Y*0.001, frameCount*0.001);
-        //float mas = 0;//map(n,0,1,-100,100);
+        int DRAW_Y = int(i * intervaloLineas + intervaloLineas + (height*0.08));
+        
+        // Color de la linea
         stroke(255);
 
         // REFERIDO A EDAD -> Amplitud -> Y
-        MOVIMIENTOS[i] = constrain(map(G_EDAD[i], 0, EDAD_MAX, 200 + random(-5, 5), 1), 0, EDAD_MAX);
+        float MAX_AMP = 200;
+        MOVIMIENTOS[i] = constrain(map(G_EDAD[i], 0, EDAD_MAX, MAX_AMP, 1), 0, EDAD_MAX);
 
         // Desplazamiento eje Y
-        DESPLAZAMIENTOS[i] = map(sin(frameCount*4), -1, 1, -MOVIMIENTOS[i], MOVIMIENTOS[i]);
+        float CUR_AMP = MOVIMIENTOS[i];
+        // Modular para que no sea siempre un release lineal
+        float modularForma = map(sin(frameCount*random(0.005, 0.2)), -1, 1, CUR_AMP*0.2, CUR_AMP);
+        DESPLAZAMIENTOS[i] = constrain(map(sin(frameCount*4), -1, 1, -MOVIMIENTOS[i], MOVIMIENTOS[i]), -modularForma, modularForma);
 
         // Colorea
-        //stroke(255);
-        //if (MOVIMIENTOS[i] > 80) {
-        color c = lerpColor(color(255, 255, 255), color(255, 0, 100), MOVIMIENTOS[i] / 205);
-        stroke(c);
-        //}
+        float alpha = map(CUR_AMP, 0, MAX_AMP, 255, 20);
+        stroke(255, alpha);
         if (i == 17) {
             // Si es san juan -> rojo
             stroke(255, 0, 0);
         }
-        //if (MOVIMIENTOS[i] > 80) {
-        //    fill(255, 100);
-        //    textSize(10);
-        //    text(G_EDAD[i], posPrevLineas[i].x, posPrevLineas[i].y);
-        //}
         // Dibujo
+        //if (frameCount%10 == 0 && abs(CUR_AMP)>20) {
+        //    float diam = random(2, 6);
+        //    ellipse(posPrevLineas[i].x, posPrevLineas[i].y, diam, diam);
+        //}
         line(posPrevLineas[i].x, posPrevLineas[i].y, DRAW_X[i], DRAW_Y + DESPLAZAMIENTOS[i]);
         // Almacena el punto previo de la linea
         posPrevLineas[i].set(DRAW_X[i], DRAW_Y + DESPLAZAMIENTOS[i]);
